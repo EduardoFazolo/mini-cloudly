@@ -1145,15 +1145,13 @@ function setupEvents() {
   });
 
   document.getElementById('captionStage').addEventListener('click', (e) => {
-    // Ignore clicks on the text element itself
+    // If text already placed, ignore stage clicks — drag to reposition
+    if (captionTextEl) return;
     if (captionTextEl && captionTextEl.contains(e.target)) return;
 
-    const stage = document.getElementById('captionStage');
-    const img   = document.getElementById('captionPreviewImg');
-    const sr = stage.getBoundingClientRect();
-    const ir = img.getBoundingClientRect();
+    const img = document.getElementById('captionPreviewImg');
+    const ir  = img.getBoundingClientRect();
 
-    // Clamp click to rendered image bounds
     const cx = Math.max(ir.left, Math.min(ir.right,  e.clientX));
     const cy = Math.max(ir.top,  Math.min(ir.bottom, e.clientY));
 

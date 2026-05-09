@@ -1392,19 +1392,16 @@ body {
   font-weight: 700;
   font-size: 20px;
   color: white;
-  text-shadow:
-    -2px -2px 0 black, 2px -2px 0 black,
-    -2px  2px 0 black, 2px  2px 0 black;
+  -webkit-text-stroke: 2.5px black;
+  paint-order: stroke fill;
 }
 .caption-text-el.style-bold .caption-text-inner {
   font-family: sans-serif;
   font-weight: 900;
   font-size: 22px;
   color: white;
-  text-shadow:
-    -3px -3px 0 rgba(0,0,0,.9), 3px -3px 0 rgba(0,0,0,.9),
-    -3px  3px 0 rgba(0,0,0,.9), 3px  3px 0 rgba(0,0,0,.9),
-    2px   3px 5px rgba(0,0,0,.6);
+  -webkit-text-stroke: 5px black;
+  paint-order: stroke fill;
 }
 .caption-text-el.style-neon .caption-text-inner {
   font-family: sans-serif;
