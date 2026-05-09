@@ -9,6 +9,7 @@ const { encrypt, decrypt } = require('./crypto');
 const db      = require('./db');
 const { compress }      = require('./compress');
 const { generateThumb } = require('./thumb');
+const { addCaption }    = require('./caption');
 
 const app  = express();
 const PORT = process.env.PORT || 4242;
@@ -187,6 +188,43 @@ app.post('/files/:id/compress', async (req, res) => {
   fs.writeFileSync(encPath, encrypt(compressed));
   db.updateSize(file.id, compressed.length);
   res.json({ ...file, size: compressed.length });
+});
+
+// ─── Caption ───
+app.post('/files/:id/caption', async (req, res) => {
+  const file = db.getById(req.params.id);
+  if (!file) return res.status(404).json({ error: 'not found' });
+  if (file.mime !== 'image/gif') return res.status(400).json({ error: 'GIF only' });
+
+  const { text, style = 'classic', position = 'bottom' } = req.body;
+  if (!text?.trim()) return res.status(400).json({ error: 'text required' });
+
+  const encPath = path.join(STORAGE, file.id);
+  if (!fs.existsSync(encPath)) return res.status(404).json({ error: 'file missing' });
+
+  let decrypted;
+  try { decrypted = decrypt(fs.readFileSync(encPath)); }
+  catch { return res.status(500).json({ error: 'decrypt failed' }); }
+
+  let captioned;
+  try { captioned = await addCaption(decrypted, text.trim(), style, position); }
+  catch (err) { return res.status(422).json({ error: err.message }); }
+
+  const newId      = crypto.randomUUID();
+  const baseName   = file.name.replace(/\.gif$/i, '');
+  const newName    = `${baseName}_captioned.gif`;
+
+  fs.writeFileSync(path.join(STORAGE, newId), encrypt(captioned));
+  res.json(db.insert({
+    id:         newId,
+    name:       newName,
+    mime:       'image/gif',
+    size:       captioned.length,
+    domain:     file.domain,
+    folder_id:  file.folder_id,
+    tags:       null,
+    created_at: Date.now(),
+  }));
 });
 
 // ─── Delete ───

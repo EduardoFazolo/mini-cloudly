@@ -1,6 +1,6 @@
 FROM node:22-alpine
 
-RUN apk add --no-cache ffmpeg gifsicle
+RUN apk add --no-cache ffmpeg gifsicle fontconfig ttf-dejavu
 
 WORKDIR /app
 

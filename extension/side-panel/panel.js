@@ -11,6 +11,9 @@ let hasTarget       = false;
 let sizeFilter      = 'all';
 let availableTags   = [];
 let activeTagId     = null;
+let captionFileId   = null;
+let captionStyle    = 'classic';
+let captionPos      = 'bottom';
 const SIZE_THRESHOLD = 10 * 1024 * 1024;
 const TAG_COLORS = ['#6366f1','#f87171','#34d399','#fb923c','#60a5fa','#f472b6','#facc15','#c084fc','#2dd4bf'];
 
@@ -558,6 +561,18 @@ function buildCard(file) {
     card.appendChild(cmp);
   }
 
+  if (file.mime === 'image/gif') {
+    const cap = document.createElement('button');
+    cap.className = 'card-caption';
+    cap.title = 'Add caption';
+    cap.textContent = 'Aa';
+    cap.addEventListener('click', (e) => {
+      e.stopPropagation();
+      openCaptionEditor(file);
+    });
+    card.appendChild(cap);
+  }
+
   card.appendChild(thumb);
   card.appendChild(info);
   card.appendChild(del);
@@ -684,6 +699,73 @@ async function compressFile(file, btn, card, targetMB = 10) {
     btn.textContent = '⚡';
     btn.disabled = false;
     showToast('Compress failed: ' + err.message, 'error');
+  }
+}
+
+// ─── Caption editor ───
+function openCaptionEditor(file) {
+  captionFileId = file.id;
+  captionStyle  = 'classic';
+  captionPos    = 'bottom';
+
+  document.getElementById('captionPreviewImg').src = `${API}/files/${file.id}`;
+  document.getElementById('captionTextInput').value = '';
+  updateCaptionPreviewText('');
+
+  document.querySelectorAll('.caption-style-btn').forEach(b =>
+    b.classList.toggle('active', b.dataset.style === captionStyle));
+  document.querySelectorAll('.caption-pos-btn').forEach(b =>
+    b.classList.toggle('active', b.dataset.pos === captionPos));
+
+  updateCaptionPreviewStyle();
+
+  document.getElementById('captionSaveBtn').disabled = false;
+  document.getElementById('captionSaveBtn').textContent = 'Save as new GIF';
+  document.getElementById('captionOverlay').style.display = 'flex';
+  document.getElementById('captionTextInput').focus();
+}
+
+function closeCaptionEditor() {
+  document.getElementById('captionOverlay').style.display = 'none';
+  const img = document.getElementById('captionPreviewImg');
+  img.src = '';
+  captionFileId = null;
+}
+
+function updateCaptionPreviewText(text) {
+  document.getElementById('captionPreviewText').textContent = text;
+}
+
+function updateCaptionPreviewStyle() {
+  const el = document.getElementById('captionPreviewText');
+  el.className = `caption-preview-text style-${captionStyle} pos-${captionPos}`;
+}
+
+async function saveCaption() {
+  const text = document.getElementById('captionTextInput').value.trim();
+  if (!text) { showToast('Add a caption first', 'error'); return; }
+
+  const btn = document.getElementById('captionSaveBtn');
+  btn.disabled = true;
+  btn.textContent = 'Saving…';
+
+  try {
+    const res = await fetch(`${API}/files/${captionFileId}/caption`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text, style: captionStyle, position: captionPos }),
+    });
+    if (!res.ok) { const { error } = await res.json(); throw new Error(error); }
+    const newFile = await res.json();
+    files.unshift(newFile);
+    if (currentFolder) fileCounts[currentFolder.id] = (fileCounts[currentFolder.id] || 0) + 1;
+    showToast(`Saved as "${newFile.name}"`, 'success');
+    closeCaptionEditor();
+    render();
+  } catch (err) {
+    showToast('Caption failed: ' + err.message, 'error');
+    btn.disabled = false;
+    btn.textContent = 'Save as new GIF';
   }
 }
 
@@ -972,12 +1054,36 @@ function escHtml(s) {
 function setupEvents() {
   document.addEventListener('click', hideContextMenu);
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') { hideContextMenu(); closePreview(); }
+    if (e.key === 'Escape') { hideContextMenu(); closePreview(); closeCaptionEditor(); }
   });
   document.addEventListener('scroll', hideContextMenu, true);
 
   document.getElementById('previewClose').addEventListener('click', closePreview);
   document.getElementById('previewBackdrop').addEventListener('click', closePreview);
+
+  document.getElementById('captionClose').addEventListener('click', closeCaptionEditor);
+  document.getElementById('captionBackdrop').addEventListener('click', closeCaptionEditor);
+  document.getElementById('captionSaveBtn').addEventListener('click', saveCaption);
+
+  document.getElementById('captionTextInput').addEventListener('input', (e) => {
+    updateCaptionPreviewText(e.target.value);
+  });
+
+  document.getElementById('captionStyles').addEventListener('click', (e) => {
+    const btn = e.target.closest('.caption-style-btn');
+    if (!btn) return;
+    captionStyle = btn.dataset.style;
+    document.querySelectorAll('.caption-style-btn').forEach(b => b.classList.toggle('active', b === btn));
+    updateCaptionPreviewStyle();
+  });
+
+  document.getElementById('captionPositions').addEventListener('click', (e) => {
+    const btn = e.target.closest('.caption-pos-btn');
+    if (!btn) return;
+    captionPos = btn.dataset.pos;
+    document.querySelectorAll('.caption-pos-btn').forEach(b => b.classList.toggle('active', b === btn));
+    updateCaptionPreviewStyle();
+  });
 
   document.getElementById('searchInput').addEventListener('input', () => {
     renderFolderList();

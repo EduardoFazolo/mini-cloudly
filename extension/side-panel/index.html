@@ -146,6 +146,39 @@
       </div>
     </div>
 
+    <div class="caption-overlay" id="captionOverlay" style="display:none">
+      <div class="caption-backdrop" id="captionBackdrop"></div>
+      <div class="caption-modal">
+        <button class="caption-close" id="captionClose">×</button>
+        <div class="caption-preview-wrap">
+          <img class="caption-preview-img" id="captionPreviewImg" src="" alt="">
+          <div class="caption-preview-text" id="captionPreviewText"></div>
+        </div>
+        <div class="caption-controls">
+          <input type="text" class="caption-text-input" id="captionTextInput" placeholder="Add caption…" maxlength="80" autocomplete="off">
+          <div class="caption-row">
+            <span class="caption-label">Style</span>
+            <div class="caption-styles" id="captionStyles">
+              <button class="caption-style-btn active" data-style="classic">Classic</button>
+              <button class="caption-style-btn" data-style="bold">Bold</button>
+              <button class="caption-style-btn" data-style="neon">Neon</button>
+              <button class="caption-style-btn" data-style="typewriter">Mono</button>
+              <button class="caption-style-btn" data-style="clean">Clean</button>
+            </div>
+          </div>
+          <div class="caption-row">
+            <span class="caption-label">Position</span>
+            <div class="caption-positions" id="captionPositions">
+              <button class="caption-pos-btn" data-pos="top">Top</button>
+              <button class="caption-pos-btn" data-pos="center">Center</button>
+              <button class="caption-pos-btn active" data-pos="bottom">Bottom</button>
+            </div>
+          </div>
+          <button class="caption-save-btn" id="captionSaveBtn">Save as new GIF</button>
+        </div>
+      </div>
+    </div>
+
     <div class="inspector-overlay" id="inspectorOverlay" style="display:none">
       <div class="inspector-toast">
         <div class="inspector-pulse"></div>
