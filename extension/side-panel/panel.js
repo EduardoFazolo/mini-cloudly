@@ -11,9 +11,11 @@ let hasTarget       = false;
 let sizeFilter      = 'all';
 let availableTags   = [];
 let activeTagId     = null;
-let captionFileId   = null;
-let captionStyle    = 'classic';
-let captionPos      = 'bottom';
+let captionFileId  = null;
+let captionStyle   = 'classic';
+let captionTextEl  = null;   // the draggable wrapper div
+let captionX_pct   = 0.5;   // position relative to rendered image bounds (0-1)
+let captionY_pct   = 0.88;
 const SIZE_THRESHOLD = 10 * 1024 * 1024;
 const TAG_COLORS = ['#6366f1','#f87171','#34d399','#fb923c','#60a5fa','#f472b6','#facc15','#c084fc','#2dd4bf'];
 
@@ -706,44 +708,113 @@ async function compressFile(file, btn, card, targetMB = 10) {
 function openCaptionEditor(file) {
   captionFileId = file.id;
   captionStyle  = 'classic';
-  captionPos    = 'bottom';
+  captionX_pct  = 0.5;
+  captionY_pct  = 0.88;
+  captionTextEl = null;
 
   document.getElementById('captionPreviewImg').src = `${API}/files/${file.id}`;
-  document.getElementById('captionTextInput').value = '';
-  updateCaptionPreviewText('');
+  document.getElementById('captionSaveBtn').disabled = false;
+  document.getElementById('captionSaveBtn').textContent = 'Save as new GIF';
+  document.getElementById('captionHint').textContent = 'Tap the image to place text';
 
   document.querySelectorAll('.caption-style-btn').forEach(b =>
     b.classList.toggle('active', b.dataset.style === captionStyle));
-  document.querySelectorAll('.caption-pos-btn').forEach(b =>
-    b.classList.toggle('active', b.dataset.pos === captionPos));
 
-  updateCaptionPreviewStyle();
+  // Clear any leftover text elements
+  document.querySelectorAll('.caption-text-el').forEach(e => e.remove());
 
-  document.getElementById('captionSaveBtn').disabled = false;
-  document.getElementById('captionSaveBtn').textContent = 'Save as new GIF';
   document.getElementById('captionOverlay').style.display = 'flex';
-  document.getElementById('captionTextInput').focus();
 }
 
 function closeCaptionEditor() {
   document.getElementById('captionOverlay').style.display = 'none';
-  const img = document.getElementById('captionPreviewImg');
-  img.src = '';
+  document.getElementById('captionPreviewImg').src = '';
+  document.querySelectorAll('.caption-text-el').forEach(e => e.remove());
   captionFileId = null;
+  captionTextEl = null;
 }
 
-function updateCaptionPreviewText(text) {
-  document.getElementById('captionPreviewText').textContent = text;
+// Returns the rendered image bounds relative to the stage element
+function getImageRectInStage() {
+  const stage = document.getElementById('captionStage');
+  const img   = document.getElementById('captionPreviewImg');
+  const sr = stage.getBoundingClientRect();
+  const ir = img.getBoundingClientRect();
+  return {
+    left:   ir.left - sr.left,
+    top:    ir.top  - sr.top,
+    width:  ir.width,
+    height: ir.height,
+  };
 }
 
-function updateCaptionPreviewStyle() {
-  const el = document.getElementById('captionPreviewText');
-  el.className = `caption-preview-text style-${captionStyle} pos-${captionPos}`;
+function positionCaptionTextEl() {
+  if (!captionTextEl) return;
+  const r = getImageRectInStage();
+  captionTextEl.style.left = (r.left + captionX_pct * r.width)  + 'px';
+  captionTextEl.style.top  = (r.top  + captionY_pct * r.height) + 'px';
+}
+
+function createCaptionTextEl(x_pct, y_pct) {
+  // Remove existing
+  document.querySelectorAll('.caption-text-el').forEach(e => e.remove());
+
+  captionX_pct = x_pct;
+  captionY_pct = y_pct;
+
+  const wrap = document.createElement('div');
+  wrap.className = `caption-text-el style-${captionStyle}`;
+
+  const inner = document.createElement('div');
+  inner.className = 'caption-text-inner';
+  inner.contentEditable = 'true';
+  inner.spellcheck = false;
+
+  // Prevent stage click from re-triggering when clicking the text
+  inner.addEventListener('click',     e => e.stopPropagation());
+  inner.addEventListener('mousedown', e => e.stopPropagation());
+
+  wrap.appendChild(inner);
+  document.getElementById('captionStage').appendChild(wrap);
+  captionTextEl = wrap;
+
+  positionCaptionTextEl();
+  inner.focus();
+
+  // ── Drag ──
+  let dragging = false, startPX, startPY, startXpct, startYpct;
+
+  wrap.addEventListener('pointerdown', (e) => {
+    if (e.target === inner) return; // let contenteditable handle it
+    dragging   = true;
+    startPX    = e.clientX;
+    startPY    = e.clientY;
+    startXpct  = captionX_pct;
+    startYpct  = captionY_pct;
+    wrap.setPointerCapture(e.pointerId);
+    e.preventDefault();
+  });
+
+  wrap.addEventListener('pointermove', (e) => {
+    if (!dragging) return;
+    const r = getImageRectInStage();
+    captionX_pct = Math.max(0.02, Math.min(0.98, startXpct + (e.clientX - startPX) / r.width));
+    captionY_pct = Math.max(0.02, Math.min(0.98, startYpct + (e.clientY - startPY) / r.height));
+    positionCaptionTextEl();
+  });
+
+  wrap.addEventListener('pointerup', () => { dragging = false; });
+}
+
+function updateCaptionTextStyle() {
+  if (!captionTextEl) return;
+  captionTextEl.className = `caption-text-el style-${captionStyle}`;
 }
 
 async function saveCaption() {
-  const text = document.getElementById('captionTextInput').value.trim();
-  if (!text) { showToast('Add a caption first', 'error'); return; }
+  const inner = captionTextEl?.querySelector('.caption-text-inner');
+  const text  = (inner?.textContent || '').trim();
+  if (!text) { showToast('Place text on the image first', 'error'); return; }
 
   const btn = document.getElementById('captionSaveBtn');
   btn.disabled = true;
@@ -753,7 +824,7 @@ async function saveCaption() {
     const res = await fetch(`${API}/files/${captionFileId}/caption`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text, style: captionStyle, position: captionPos }),
+      body: JSON.stringify({ text, style: captionStyle, x_pct: captionX_pct, y_pct: captionY_pct }),
     });
     if (!res.ok) { const { error } = await res.json(); throw new Error(error); }
     const newFile = await res.json();
@@ -1065,24 +1136,32 @@ function setupEvents() {
   document.getElementById('captionBackdrop').addEventListener('click', closeCaptionEditor);
   document.getElementById('captionSaveBtn').addEventListener('click', saveCaption);
 
-  document.getElementById('captionTextInput').addEventListener('input', (e) => {
-    updateCaptionPreviewText(e.target.value);
-  });
-
   document.getElementById('captionStyles').addEventListener('click', (e) => {
     const btn = e.target.closest('.caption-style-btn');
     if (!btn) return;
     captionStyle = btn.dataset.style;
     document.querySelectorAll('.caption-style-btn').forEach(b => b.classList.toggle('active', b === btn));
-    updateCaptionPreviewStyle();
+    updateCaptionTextStyle();
   });
 
-  document.getElementById('captionPositions').addEventListener('click', (e) => {
-    const btn = e.target.closest('.caption-pos-btn');
-    if (!btn) return;
-    captionPos = btn.dataset.pos;
-    document.querySelectorAll('.caption-pos-btn').forEach(b => b.classList.toggle('active', b === btn));
-    updateCaptionPreviewStyle();
+  document.getElementById('captionStage').addEventListener('click', (e) => {
+    // Ignore clicks on the text element itself
+    if (captionTextEl && captionTextEl.contains(e.target)) return;
+
+    const stage = document.getElementById('captionStage');
+    const img   = document.getElementById('captionPreviewImg');
+    const sr = stage.getBoundingClientRect();
+    const ir = img.getBoundingClientRect();
+
+    // Clamp click to rendered image bounds
+    const cx = Math.max(ir.left, Math.min(ir.right,  e.clientX));
+    const cy = Math.max(ir.top,  Math.min(ir.bottom, e.clientY));
+
+    const x_pct = (cx - ir.left) / ir.width;
+    const y_pct = (cy - ir.top)  / ir.height;
+
+    createCaptionTextEl(x_pct, y_pct);
+    document.getElementById('captionHint').textContent = 'Drag to reposition';
   });
 
   document.getElementById('searchInput').addEventListener('input', () => {

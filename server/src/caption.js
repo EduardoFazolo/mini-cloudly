@@ -10,7 +10,6 @@ function tmpFile(ext) {
   return path.join(os.tmpdir(), `cly_cap_${Date.now()}_${Math.random().toString(36).slice(2)}${ext}`);
 }
 
-// ffmpeg drawtext filter-level escaping (file-based, no shell escaping needed)
 function escDrawtext(s) {
   return s
     .replace(/\\/g, '\\\\')
@@ -26,21 +25,20 @@ const F = {
   mono: path.join(FONT_DIR, 'DejaVuSansMono.ttf'),
 };
 
-const Y_EXPR = {
-  top:    'th+20',
-  center: '(h-th)/2',
-  bottom: 'h-th-20',
-};
-
-function buildDrawtext(text, style, position, width) {
+// x_pct / y_pct: 0-1, relative to GIF dimensions, anchored at text center
+function buildDrawtext(text, style, x_pct, y_pct, width, height) {
   const t    = escDrawtext(text);
   const size = Math.max(18, Math.round(width * 0.072));
-  const y    = Y_EXPR[position] || Y_EXPR.bottom;
+  const px   = Math.round(x_pct * width);
+  const py   = Math.round(y_pct * height);
+  // Center text on the clicked point, clamped inside frame
+  const x = `max(0,min(w-tw,${px}-tw/2))`;
+  const y = `max(0,min(h-th,${py}-th/2))`;
 
   const dt = (f, fc, bw, bc, sx, sy, sc) =>
     `drawtext=fontfile='${f}':text='${t}':fontcolor=${fc}:fontsize=${size}` +
     `:borderw=${bw}:bordercolor=${bc}:shadowx=${sx}:shadowy=${sy}:shadowcolor=${sc}` +
-    `:x=(w-tw)/2:y=${y}`;
+    `:x=${x}:y=${y}`;
 
   switch (style) {
     case 'bold':       return dt(F.bold, 'white',   6, 'black@0.85', 3, 3, 'black@0.5');
@@ -51,16 +49,17 @@ function buildDrawtext(text, style, position, width) {
   }
 }
 
-async function getGifWidth(inputPath) {
+async function getGifDimensions(inputPath) {
   const { stdout } = await execP('ffprobe', [
     '-v', 'quiet', '-print_format', 'json',
     '-show_streams', '-select_streams', 'v:0',
     inputPath,
   ]);
-  return JSON.parse(stdout).streams?.[0]?.width || 480;
+  const s = JSON.parse(stdout).streams?.[0];
+  return { width: s?.width || 480, height: s?.height || 320 };
 }
 
-async function addCaption(inputBuffer, text, style, position) {
+async function addCaption(inputBuffer, text, style, x_pct, y_pct) {
   const inputPath  = tmpFile('.gif');
   const outputPath = tmpFile('.gif');
   const scriptPath = tmpFile('.txt');
@@ -68,8 +67,8 @@ async function addCaption(inputBuffer, text, style, position) {
   fs.writeFileSync(inputPath, inputBuffer);
 
   try {
-    const width    = await getGifWidth(inputPath);
-    const drawtext = buildDrawtext(text, style, position, width);
+    const { width, height } = await getGifDimensions(inputPath);
+    const drawtext = buildDrawtext(text, style, x_pct, y_pct, width, height);
     const filter   =
       `[0:v]${drawtext}[dt];` +
       `[dt]split[s0][s1];` +
