@@ -11,11 +11,10 @@ let hasTarget       = false;
 let sizeFilter      = 'all';
 let availableTags   = [];
 let activeTagId     = null;
-let captionFileId  = null;
-let captionStyle   = 'classic';
-let captionTextEl  = null;   // the draggable wrapper div
-let captionX_pct   = 0.5;   // position relative to rendered image bounds (0-1)
-let captionY_pct   = 0.88;
+let captionFileId   = null;
+let captionStyle    = 'classic';
+let captionTexts    = [];   // [{ el, innerEl, x_pct, y_pct, style }]
+let selectedCaption = null;
 const SIZE_THRESHOLD = 10 * 1024 * 1024;
 const TAG_COLORS = ['#6366f1','#f87171','#34d399','#fb923c','#60a5fa','#f472b6','#facc15','#c084fc','#2dd4bf'];
 
@@ -706,23 +705,19 @@ async function compressFile(file, btn, card, targetMB = 10) {
 
 // ─── Caption editor ───
 function openCaptionEditor(file) {
-  captionFileId = file.id;
-  captionStyle  = 'classic';
-  captionX_pct  = 0.5;
-  captionY_pct  = 0.88;
-  captionTextEl = null;
+  captionFileId   = file.id;
+  captionStyle    = 'classic';
+  captionTexts    = [];
+  selectedCaption = null;
 
   document.getElementById('captionPreviewImg').src = `${API}/files/${file.id}`;
   document.getElementById('captionSaveBtn').disabled = false;
   document.getElementById('captionSaveBtn').textContent = 'Save as new GIF';
-  document.getElementById('captionHint').textContent = 'Tap the image to place text';
+  document.getElementById('captionHint').textContent = 'Tap image to add text';
 
   document.querySelectorAll('.caption-style-btn').forEach(b =>
     b.classList.toggle('active', b.dataset.style === captionStyle));
-
-  // Clear any leftover text elements
   document.querySelectorAll('.caption-text-el').forEach(e => e.remove());
-
   document.getElementById('captionOverlay').style.display = 'flex';
 }
 
@@ -730,67 +725,65 @@ function closeCaptionEditor() {
   document.getElementById('captionOverlay').style.display = 'none';
   document.getElementById('captionPreviewImg').src = '';
   document.querySelectorAll('.caption-text-el').forEach(e => e.remove());
-  captionFileId = null;
-  captionTextEl = null;
+  captionFileId   = null;
+  captionTexts    = [];
+  selectedCaption = null;
 }
 
-// Returns the rendered image bounds relative to the stage element
 function getImageRectInStage() {
   const stage = document.getElementById('captionStage');
   const img   = document.getElementById('captionPreviewImg');
   const sr = stage.getBoundingClientRect();
   const ir = img.getBoundingClientRect();
-  return {
-    left:   ir.left - sr.left,
-    top:    ir.top  - sr.top,
-    width:  ir.width,
-    height: ir.height,
-  };
+  return { left: ir.left - sr.left, top: ir.top - sr.top, width: ir.width, height: ir.height };
 }
 
-function positionCaptionTextEl() {
-  if (!captionTextEl) return;
+function positionEntry(entry) {
   const r = getImageRectInStage();
-  captionTextEl.style.left = (r.left + captionX_pct * r.width)  + 'px';
-  captionTextEl.style.top  = (r.top  + captionY_pct * r.height) + 'px';
+  entry.el.style.left = (r.left + entry.x_pct * r.width)  + 'px';
+  entry.el.style.top  = (r.top  + entry.y_pct * r.height) + 'px';
+}
+
+function selectCaption(entry) {
+  selectedCaption = entry;
+  captionTexts.forEach(e => { e.el.className = `caption-text-el style-${e.style}`; });
+  entry.el.className = `caption-text-el style-${entry.style} selected`;
+  captionStyle = entry.style;
+  document.querySelectorAll('.caption-style-btn').forEach(b =>
+    b.classList.toggle('active', b.dataset.style === captionStyle));
 }
 
 function createCaptionTextEl(x_pct, y_pct) {
-  // Remove existing
-  document.querySelectorAll('.caption-text-el').forEach(e => e.remove());
-
-  captionX_pct = x_pct;
-  captionY_pct = y_pct;
-
-  const wrap = document.createElement('div');
-  wrap.className = `caption-text-el style-${captionStyle}`;
+  const wrap  = document.createElement('div');
+  wrap.className = `caption-text-el style-${captionStyle} selected`;
 
   const inner = document.createElement('div');
-  inner.className = 'caption-text-inner';
+  inner.className      = 'caption-text-inner';
   inner.contentEditable = 'true';
-  inner.spellcheck = false;
-
-  // Prevent stage click from re-triggering when clicking the text
-  inner.addEventListener('click',     e => e.stopPropagation());
-  inner.addEventListener('mousedown', e => e.stopPropagation());
+  inner.spellcheck     = false;
 
   wrap.appendChild(inner);
   document.getElementById('captionStage').appendChild(wrap);
-  captionTextEl = wrap;
 
-  positionCaptionTextEl();
-  inner.focus();
+  const entry = { el: wrap, innerEl: inner, x_pct, y_pct, style: captionStyle };
+  captionTexts.push(entry);
 
-  // ── Drag ──
+  // Stop stage events from firing when interacting with this element
+  wrap.addEventListener('click',    e => e.stopPropagation());
+  wrap.addEventListener('dblclick', e => e.stopPropagation());
+  inner.addEventListener('focus', () => selectCaption(entry));
+
+  // ── Drag (from the padding aura around the text) ──
   let dragging = false, startPX, startPY, startXpct, startYpct;
 
   wrap.addEventListener('pointerdown', (e) => {
-    if (e.target === inner) return; // let contenteditable handle it
-    dragging   = true;
-    startPX    = e.clientX;
-    startPY    = e.clientY;
-    startXpct  = captionX_pct;
-    startYpct  = captionY_pct;
+    selectCaption(entry);
+    if (e.target === inner) return;
+    dragging  = true;
+    startPX   = e.clientX;
+    startPY   = e.clientY;
+    startXpct = entry.x_pct;
+    startYpct = entry.y_pct;
     wrap.setPointerCapture(e.pointerId);
     e.preventDefault();
   });
@@ -798,23 +791,30 @@ function createCaptionTextEl(x_pct, y_pct) {
   wrap.addEventListener('pointermove', (e) => {
     if (!dragging) return;
     const r = getImageRectInStage();
-    captionX_pct = Math.max(0.02, Math.min(0.98, startXpct + (e.clientX - startPX) / r.width));
-    captionY_pct = Math.max(0.02, Math.min(0.98, startYpct + (e.clientY - startPY) / r.height));
-    positionCaptionTextEl();
+    entry.x_pct = Math.max(0.02, Math.min(0.98, startXpct + (e.clientX - startPX) / r.width));
+    entry.y_pct = Math.max(0.02, Math.min(0.98, startYpct + (e.clientY - startPY) / r.height));
+    positionEntry(entry);
   });
 
   wrap.addEventListener('pointerup', () => { dragging = false; });
+
+  selectCaption(entry);
+  positionEntry(entry);
+  inner.focus();
 }
 
 function updateCaptionTextStyle() {
-  if (!captionTextEl) return;
-  captionTextEl.className = `caption-text-el style-${captionStyle}`;
+  if (!selectedCaption) return;
+  selectedCaption.style       = captionStyle;
+  selectedCaption.el.className = `caption-text-el style-${captionStyle} selected`;
 }
 
 async function saveCaption() {
-  const inner = captionTextEl?.querySelector('.caption-text-inner');
-  const text  = (inner?.textContent || '').trim();
-  if (!text) { showToast('Place text on the image first', 'error'); return; }
+  const texts = captionTexts
+    .map(e => ({ text: e.innerEl.textContent.trim(), style: e.style, x_pct: e.x_pct, y_pct: e.y_pct }))
+    .filter(t => t.text);
+
+  if (!texts.length) { showToast('Add some text first', 'error'); return; }
 
   const btn = document.getElementById('captionSaveBtn');
   btn.disabled = true;
@@ -824,7 +824,7 @@ async function saveCaption() {
     const res = await fetch(`${API}/files/${captionFileId}/caption`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text, style: captionStyle, x_pct: captionX_pct, y_pct: captionY_pct }),
+      body: JSON.stringify({ texts }),
     });
     if (!res.ok) { const { error } = await res.json(); throw new Error(error); }
     const newFile = await res.json();
@@ -1145,23 +1145,25 @@ function setupEvents() {
   });
 
   function placeCaptionAt(e) {
-    if (captionTextEl && captionTextEl.contains(e.target)) return;
     const img = document.getElementById('captionPreviewImg');
     const ir  = img.getBoundingClientRect();
     const cx  = Math.max(ir.left, Math.min(ir.right,  e.clientX));
     const cy  = Math.max(ir.top,  Math.min(ir.bottom, e.clientY));
     createCaptionTextEl((cx - ir.left) / ir.width, (cy - ir.top) / ir.height);
-    document.getElementById('captionHint').textContent = 'Drag edges to move · Double-tap to replace';
+    document.getElementById('captionHint').textContent = 'Tap to add more · Drag edges to move';
   }
 
-  // First tap: place text. If text already exists, single click does nothing.
+  let stageClickTimer = null;
+  // Single click: place text only when none exist yet
   document.getElementById('captionStage').addEventListener('click', (e) => {
-    if (captionTextEl) return;
-    placeCaptionAt(e);
+    clearTimeout(stageClickTimer);
+    if (captionTexts.length > 0) return;
+    stageClickTimer = setTimeout(() => placeCaptionAt(e), 220);
   });
 
-  // Double-tap: always place new text at that point (replaces existing)
+  // Double-click: always add a new text at that point
   document.getElementById('captionStage').addEventListener('dblclick', (e) => {
+    clearTimeout(stageClickTimer);
     placeCaptionAt(e);
   });
 

@@ -196,8 +196,13 @@ app.post('/files/:id/caption', async (req, res) => {
   if (!file) return res.status(404).json({ error: 'not found' });
   if (file.mime !== 'image/gif') return res.status(400).json({ error: 'GIF only' });
 
-  const { text, style = 'classic', x_pct = 0.5, y_pct = 0.88 } = req.body;
-  if (!text?.trim()) return res.status(400).json({ error: 'text required' });
+  const { texts } = req.body;
+  if (!Array.isArray(texts) || !texts.length) return res.status(400).json({ error: 'texts array required' });
+
+  const clean = texts
+    .map(t => ({ text: String(t.text || '').trim(), style: t.style || 'classic', x_pct: parseFloat(t.x_pct) || 0.5, y_pct: parseFloat(t.y_pct) || 0.88 }))
+    .filter(t => t.text);
+  if (!clean.length) return res.status(400).json({ error: 'no non-empty text' });
 
   const encPath = path.join(STORAGE, file.id);
   if (!fs.existsSync(encPath)) return res.status(404).json({ error: 'file missing' });
@@ -207,7 +212,7 @@ app.post('/files/:id/caption', async (req, res) => {
   catch { return res.status(500).json({ error: 'decrypt failed' }); }
 
   let captioned;
-  try { captioned = await addCaption(decrypted, text.trim(), style, parseFloat(x_pct) || 0.5, parseFloat(y_pct) || 0.88); }
+  try { captioned = await addCaption(decrypted, clean); }
   catch (err) { return res.status(422).json({ error: err.message }); }
 
   const newId      = crypto.randomUUID();

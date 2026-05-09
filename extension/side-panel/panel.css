@@ -1369,7 +1369,8 @@ body {
   border: 1px dashed rgba(255,255,255,.18);
   transition: border-color .12s;
 }
-.caption-text-el:hover { border-color: rgba(255,255,255,.4); }
+.caption-text-el:hover  { border-color: rgba(255,255,255,.4); }
+.caption-text-el.selected { border-color: rgba(255,255,255,.65); }
 
 .caption-text-inner {
   display: inline-block;
