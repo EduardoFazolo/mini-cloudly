@@ -1364,7 +1364,12 @@ body {
   touch-action: none;
   cursor: move;
   max-width: 85%;
+  padding: 16px;
+  border-radius: 6px;
+  border: 1px dashed rgba(255,255,255,.18);
+  transition: border-color .12s;
 }
+.caption-text-el:hover { border-color: rgba(255,255,255,.4); }
 
 .caption-text-inner {
   display: inline-block;
@@ -1374,12 +1379,11 @@ body {
   outline: none;
   white-space: pre-wrap;
   word-break: break-word;
-  border: 1px dashed rgba(255,255,255,.35);
+  border: none;
   border-radius: 3px;
   cursor: text;
   line-height: 1.25;
 }
-.caption-text-inner:focus { border-color: rgba(255,255,255,.7); }
 .caption-text-inner:empty::before {
   content: 'Type here…';
   opacity: .4;

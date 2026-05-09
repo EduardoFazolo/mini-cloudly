@@ -1144,22 +1144,25 @@ function setupEvents() {
     updateCaptionTextStyle();
   });
 
-  document.getElementById('captionStage').addEventListener('click', (e) => {
-    // If text already placed, ignore stage clicks — drag to reposition
-    if (captionTextEl) return;
+  function placeCaptionAt(e) {
     if (captionTextEl && captionTextEl.contains(e.target)) return;
-
     const img = document.getElementById('captionPreviewImg');
     const ir  = img.getBoundingClientRect();
+    const cx  = Math.max(ir.left, Math.min(ir.right,  e.clientX));
+    const cy  = Math.max(ir.top,  Math.min(ir.bottom, e.clientY));
+    createCaptionTextEl((cx - ir.left) / ir.width, (cy - ir.top) / ir.height);
+    document.getElementById('captionHint').textContent = 'Drag edges to move · Double-tap to replace';
+  }
 
-    const cx = Math.max(ir.left, Math.min(ir.right,  e.clientX));
-    const cy = Math.max(ir.top,  Math.min(ir.bottom, e.clientY));
+  // First tap: place text. If text already exists, single click does nothing.
+  document.getElementById('captionStage').addEventListener('click', (e) => {
+    if (captionTextEl) return;
+    placeCaptionAt(e);
+  });
 
-    const x_pct = (cx - ir.left) / ir.width;
-    const y_pct = (cy - ir.top)  / ir.height;
-
-    createCaptionTextEl(x_pct, y_pct);
-    document.getElementById('captionHint').textContent = 'Drag to reposition';
+  // Double-tap: always place new text at that point (replaces existing)
+  document.getElementById('captionStage').addEventListener('dblclick', (e) => {
+    placeCaptionAt(e);
   });
 
   document.getElementById('searchInput').addEventListener('input', () => {
