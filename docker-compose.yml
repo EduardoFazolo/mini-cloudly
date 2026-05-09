@@ -1,0 +1,15 @@
+services:
+  cloudly:
+    build: ./server
+    ports:
+      - "127.0.0.1:4242:4242"
+    volumes:
+      - cloudly-data:/app/data
+    environment:
+      - CLOUDLY_KEY=${CLOUDLY_KEY:-change-this-to-a-32-char-secret!!}
+      - STORAGE_DIR=/app/data/files
+      - DB_PATH=/app/data/cloudly.db
+    restart: unless-stopped
+
+volumes:
+  cloudly-data:
